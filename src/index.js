@@ -1,5 +1,6 @@
 import express from "express";
 import productRouter from "./routes/mongodb/products.routes.js";
+import usersRouter from "./routes/mongodb/users.routes.js";
 import productsRouterView from "./routes/views/products.routes.js";
 import cartRouter from "./routes/mongodb/carts.routes.js";
 import env from "./config/env.js";
@@ -26,11 +27,14 @@ import morgan from "morgan";
 import chatRouter from "./routes/chat.routes.js";
 import authRouterView from "./routes/views/auth.routes.js";
 
-//passport
+// Passport
 import initializePassport from "./config/passport.js";
 import passport from "passport";
 import compression from "express-compression";
 import productsMock from "./routes/mongodb/products.mock.routes.js";
+
+// Logger
+import logger from "../src/utils/logger/index.js";
 
 // save express framework
 const app = express();
@@ -47,10 +51,10 @@ const mongoUrl = env.MONGO_URL;
 await mongoose
   .connect(mongoUrl)
   .then(() => {
-    console.log("DB CONNECTED");
+    logger.info("DB CONNECTED");
   })
   .catch((e) => {
-    console.log("Error connecting to database");
+    logger.info("Error connecting to database");
   });
 
 const message = new messageManager();
@@ -92,6 +96,10 @@ app.use((req, res, next) => {
   if (req.isAuthenticated()) isAdmin = req.user.role === "admin";
   res.locals.isAdmin = isAdmin;
 
+  let isPremium = null;
+  if (req.isAuthenticated()) isPremium = req.user.role === "premium";
+  res.locals.isPremium = isPremium;
+
   let user = null;
   if (req.isAuthenticated()) user = req.user;
   res.locals.user = user;
@@ -111,6 +119,12 @@ app.engine(
       jsonify: function (context) {
         return JSON.stringify(context);
       },
+      or: function(a, b, options) {
+        if (a || b) {
+          return options.fn(this);
+        }
+        return options.inverse(this);
+      }
     },
   })
 );
@@ -124,6 +138,7 @@ app.use("/", express.static(__dirname + "/public"));
 // apis
 app.use("/api/carts", cartRouter);
 app.use("/api/products", productRouter);
+app.use("/api/users", usersRouter);
 //web
 app.use("/chat", chatRouter);
 app.use("/products", productsRouterView);
@@ -134,12 +149,12 @@ app.use("/mockingproducts", productsMock);
 
 app.use(errorHandler);
 
-app.use('/', (req, res) => res.redirect('/products'));
+app.use("/", (req, res) => res.redirect("/products"));
 
 // config port
 const port = env.PORT;
 server.listen(port, () => {
-  console.log(`SERVER ON PORT: ${port}`);
+  logger.info(`SERVER ON PORT: ${port}`);
 });
 
 io.use(
@@ -155,7 +170,7 @@ let connectedUsers = 0;
 
 // config socket
 io.on("connection", (socket) => {
-  console.log("Nuevo usuario conectado", socket.id);
+  console.info("Nuevo usuario conectado", socket.id);
 
   connectedUsers++;
   io.emit("userCount", connectedUsers);
@@ -215,7 +230,7 @@ io.on("connection", (socket) => {
 
   socket.on("disconnect", () => {
     connectedUsers--;
-    console.log("usuario desconectado", socket.id);
+    console.info("usuario desconectado", socket.id);
     io.emit("userCount", connectedUsers);
   });
 });
